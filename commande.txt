@@ -1,0 +1,31 @@
+sudo lsof -i :5432
+sudo kill 1234
+
+gpt-context-builder
+
+
+
+1 terminal
+API 
+(venv) ➜  backend docker run -d -p 6379:6379 redis
+(venv) ➜  backend celery -A run.celery worker --loglevel=info -P gevent
+
+2 terminal
+(venv) ➜  backend # Assurez-vous que votre venv est activé
+flask --app run.py run --debug --port=5001
+
+
+3terminal
+front :
+(venv) ➜  frontend-next git:(main) ✗ npm run dev
+
+
+
+nusuk_documents@proton.me    pour supabase
+
+
+stripe login
+stripe listen --forward-to http://localhost:5001/api/webhooks/stripe
+
+
+redis://red-d3t0k3i4d50c73enn86g:6379

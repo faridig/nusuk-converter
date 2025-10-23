@@ -1,0 +1,56 @@
+# Fichier .gitignore pour le projet Nusuk Converter
+
+# --- Sécurité ---
+# Ignorer tous les fichiers d'environnement qui contiennent des secrets
+.env
+.env.*
+!/.env.example
+
+# --- Python & Backend ---
+# Environnements virtuels
+venv/
+env/
+.venv/
+*/venv/
+*/env/
+
+# Fichiers de cache Python
+__pycache__/
+*.py[cod]
+
+# Fichiers générés par les utilisateurs (très important !)
+backend/uploads/
+backend/processed/
+
+# Dossier d'instance de Flask
+backend/instance/
+
+# Fichiers de distribution Python
+*.egg-info/
+dist/
+build/
+
+
+# --- Node.js & Frontend ---
+# Dépendances
+frontend-next/node_modules/
+
+# Fichiers de build de Next.js
+frontend-next/.next/
+frontend-next/out/
+
+# Fichiers de log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+
+# --- Fichiers système et IDE ---
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# PyCharm / IntelliJ
+.idea/
