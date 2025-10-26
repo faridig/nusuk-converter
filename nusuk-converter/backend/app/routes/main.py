@@ -89,7 +89,7 @@ def process_image():
             path=supabase_path,
             file=processed_data,
             file_options={"content-type": "image/jpeg"},
-            upsert=True  # <--- On passe "upsert" comme un argument séparé
+            upsert=True  # <--- On passe "upsert" comme un argument sépar
         )
         
         # Sauvegarde du chemin Supabase dans notre BDD
