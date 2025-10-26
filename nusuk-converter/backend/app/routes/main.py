@@ -86,9 +86,10 @@ def process_image():
         supabase_path = f"{session.id}/{new_file_name}"
         
         supabase.storage.from_("processed-files").upload(
-            file=processed_data,
             path=supabase_path,
-            file_options={"content-type": "image/jpeg", "upsert": True}
+            file=processed_data,
+            file_options={"content-type": "image/jpeg"},
+            upsert=True  # <--- On passe "upsert" comme un argument séparé
         )
         
         # Sauvegarde du chemin Supabase dans notre BDD
