@@ -1,18 +1,25 @@
+# nusuk-converter/backend/scripts/optimiseur_image.py
+
 from PIL import Image
 import os
 import io
 
-# Pas besoin de changer quoi que ce soit ici, la fonction est déjà bien écrite !
+# --- MODIFICATION APPLIQUÉE CI-DESSOUS ---
 def optimiser_image(chemin_entree, chemin_sortie, max_largeur, max_hauteur, max_taille_mo):
     """
-    Redimensionne et compresse une image (JPG ou PNG) pour respecter les contraintes 
-    de dimensions et de taille, en la sauvegardant toujours en JPG.
+    Redimensionne et compresse une image pour respecter les contraintes,
+    en acceptant soit un chemin de fichier, soit des données en mémoire (BytesIO).
     """
     max_taille_octets = max_taille_mo * 1024 * 1024
-    if not os.path.exists(chemin_entree):
+    
+    # On ne vérifie l'existence du chemin que si l'entrée est bien un texte (str).
+    # Si c'est un objet BytesIO, on saute cette vérification.
+    if isinstance(chemin_entree, str) and not os.path.exists(chemin_entree):
         print(f"Erreur : Le fichier '{chemin_entree}' n'a pas été trouvé.")
         return None
+        
     try:
+        # La fonction Image.open() est capable de lire depuis un chemin ou un objet BytesIO.
         with Image.open(chemin_entree) as img:
             if img.mode == 'RGBA':
                 background = Image.new('RGB', img.size, (255, 255, 255))
