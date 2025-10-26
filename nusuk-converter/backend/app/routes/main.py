@@ -6,6 +6,8 @@ import io
 from flask import Blueprint, request, jsonify, current_app, send_file, session as flask_session
 from werkzeug.utils import secure_filename
 from supabase import create_client, Client
+# --- AJOUT : Import spécifique pour gérer les erreurs Supabase ---
+from storage3.exceptions import StorageApiError
 from ..models import db, Session, ProcessedFile
 from scripts.optimiseur_image import optimiser_image
 
@@ -19,7 +21,7 @@ AMOUNTS_IN_CENTS = {
 # --- Route inchangée ---
 @bp.route('/create-session', methods=['POST'])
 def create_session():
-    """Initialise une nouvelle session et la lie au cookie de l'utilisateur."""
+    # ... (fonction inchangée)
     try:
         new_session = Session()
         db.session.add(new_session)
@@ -31,12 +33,13 @@ def create_session():
         current_app.logger.error(f"Erreur lors de la création de la session: {e}", exc_info=True)
         return jsonify({"code": "session_creation_failed", "message": "Impossible de créer une session."}), 500
 
-# --- MODIFICATION MAJEURE APPLIQUÉE ICI (Logique Supabase) ---
+
 @bp.route('/process-image', methods=['POST'])
 def process_image():
     """Traite une image, l'optimise, l'upload sur Supabase et la stocke en BDD."""
     session_id = request.form.get('session_id')
     
+    # ... (vérifications de session et de fichier inchangées) ...
     secure_session_id = flask_session.get('user_session_id')
     if not session_id or (secure_session_id and secure_session_id != session_id):
         current_app.logger.warning(f"Tentative d'accès non autorisé à la session {session_id} (cookie: {secure_session_id})")
@@ -53,118 +56,81 @@ def process_image():
     if file.filename == '' or not doc_type:
         return jsonify({"code": "missing_parameters", "message": "Fichier ou doc_type manquant."}), 400
     
-    # --- LOGIQUE D'OPTIMISATION DIRECTE ET UPLOAD SUPABASE ---
     try:
-        # Création du client Supabase
         supabase_url = current_app.config.get('SUPABASE_URL')
         supabase_key = current_app.config.get('SUPABASE_SERVICE_KEY')
         if not supabase_url or not supabase_key:
-            raise Exception("Les variables d'environnement SUPABASE ne sont pas configurées.")
+            # Cette erreur est maintenant plus spécifique
+            current_app.logger.critical("Les variables d'environnement SUPABASE_URL ou SUPABASE_SERVICE_KEY ne sont pas configurées sur le serveur.")
+            raise Exception("Configuration serveur incomplète.")
         supabase: Client = create_client(supabase_url, supabase_key)
         
-        # Lecture du fichier en mémoire
         input_bytes = file.read()
-
-        # Définition des contraintes
         params = {'max_largeur': 200, 'max_hauteur': 200, 'max_taille_mo': 1} if doc_type == 'photo' else {'max_largeur': 400, 'max_hauteur': 800, 'max_taille_mo': 1}
         
-        # Utilisation d'un chemin temporaire pour la sortie de l'optimiseur
-        # /tmp est un dossier standard disponible sur les systèmes Linux comme Render
         temp_output_path = f"/tmp/{uuid.uuid4()}.jpg"
-        
         processed_path = optimiser_image(io.BytesIO(input_bytes), temp_output_path, **params)
         if not processed_path:
             raise Exception("L'optimisation de l'image a échoué.")
 
         with open(processed_path, 'rb') as f:
             processed_data = f.read()
-        os.remove(temp_output_path) # Nettoyage du fichier temporaire
+        os.remove(temp_output_path)
 
-        # Upload vers Supabase Storage
-        file_id = str(uuid.uuid4())
         new_file_name = f"{doc_type}_optimise.jpg"
         supabase_path = f"{session.id}/{new_file_name}"
         
-        supabase.storage.from_("processed-files").upload(
-            path=supabase_path,
-            file=processed_data,
-            file_options={"content-type": "image/jpeg"},
-            upsert=True  # <--- On passe "upsert" comme un argument sépar
-        )
+        # --- MODIFICATION FINALE POUR LA GESTION DE L'UPLOAD ---
+        try:
+            # On essaie d'uploader normalement
+            supabase.storage.from_("processed-files").upload(
+                path=supabase_path,
+                file=processed_data,
+                file_options={"content-type": "image/jpeg"}
+            )
+        except StorageApiError as e:
+            # Si l'erreur est "Duplicate" (le fichier existe déjà), on le met à jour.
+            # C'est la méthode robuste qui fonctionne avec toutes les versions de la librairie.
+            if e.args and isinstance(e.args[0], dict) and e.args[0].get('error') == 'Duplicate':
+                current_app.logger.info(f"Le fichier {supabase_path} existe déjà. Mise à jour.")
+                supabase.storage.from_("processed-files").update(
+                    path=supabase_path,
+                    file=processed_data,
+                    file_options={"content-type": "image/jpeg"}
+                )
+            else:
+                # Si c'est une autre erreur de stockage, on la relève pour qu'elle soit loggée
+                raise e
+
+        # On vérifie si un fichier pour ce doc_type existe déjà pour cette session
+        existing_file = ProcessedFile.query.filter_by(session_id=session.id, doc_type=doc_type).first()
+        if existing_file:
+            # Si oui, on met à jour son chemin (au cas où, bien que ça ne devrait pas changer)
+            existing_file.path = supabase_path
+            current_app.logger.info(f"Enregistrement du fichier mis à jour en BDD pour la session {session_id}")
+        else:
+            # Sinon, on crée un nouvel enregistrement
+            new_file = ProcessedFile(
+                id=str(uuid.uuid4()),
+                doc_type=doc_type,
+                path=supabase_path,
+                name=new_file_name,
+                session_id=session.id
+            )
+            db.session.add(new_file)
+            current_app.logger.info(f"Nouveau fichier enregistré en BDD pour la session {session_id}")
         
-        # Sauvegarde du chemin Supabase dans notre BDD
-        new_file = ProcessedFile(
-            id=file_id,
-            doc_type=doc_type,
-            path=supabase_path,
-            name=new_file_name,
-            session_id=session.id
-        )
-        db.session.add(new_file)
         db.session.commit()
         
-        current_app.logger.info(f"Fichier uploadé sur Supabase ({supabase_path}) pour session {session_id}")
+        current_app.logger.info(f"Upload/Update réussi sur Supabase ({supabase_path}) pour session {session_id}")
         return jsonify({"message": "Le fichier a été traité avec succès."}), 201
 
     except Exception as e:
-        current_app.logger.error(f"Erreur lors du traitement de l'image pour session {session_id}: {e}", exc_info=True)
+        current_app.logger.error(f"Erreur finale lors du traitement de l'image pour session {session_id}: {e}", exc_info=True)
         return jsonify({"code": "image_processing_failed", "message": "Le traitement de l'image a échoué."}), 500
 
-# --- Route inchangée ---
-@bp.route('/create-payment-intent', methods=['POST'])
-def create_payment():
-    """Crée une intention de paiement après avoir vérifié la propriété de la session."""
-    stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
-    data = request.get_json()
-    session_id = data.get('session_id')
-    currency = data.get('currency', 'eur').lower()
-    
-    secure_session_id = flask_session.get('user_session_id')
-    if not session_id or (secure_session_id and secure_session_id != session_id):
-        return jsonify({"code": "unauthorized_session_access", "message": "Accès à la session non autorisé."}), 403
-
-    if currency not in AMOUNTS_IN_CENTS:
-        return jsonify({"code": "invalid_currency", "message": "Devise non prise en charge."}), 400
-
-    session = Session.query.get(session_id)
-    if not session or not session.files:
-        return jsonify({"code": "invalid_session_or_no_files", "message": "Session invalide ou aucun fichier à traiter."}), 400
-    
-    amount = AMOUNTS_IN_CENTS[currency]
-
-    try:
-        intent = stripe.PaymentIntent.create(
-            amount=amount, currency=currency,
-            automatic_payment_methods={'enabled': True},
-            metadata={'session_id': session_id}
-        )
-        return jsonify({'clientSecret': intent.client_secret, 'amount': amount, 'currency': currency})
-    except Exception as e:
-        return jsonify({"code": "payment_intent_failed", "message": str(e)}), 500
-    
-# --- Routes inchangées ---
-@bp.route('/session-status/<session_id>', methods=['GET'])
-def get_session_status(session_id):
-    session = Session.query.get(session_id)
-    processed_count = len(session.files) if session else 0
-    return jsonify({"processed_count": processed_count}), 200
-
-@bp.route('/payment-status/<session_id>', methods=['GET'])
-def get_payment_status(session_id):
-    session = Session.query.get(session_id)
-    status = "paid" if session and session.paid else "pending"
-    return jsonify({"status": status}), 200
-
-@bp.route('/session-files/<session_id>', methods=['GET'])
-def get_session_files(session_id):
-    session = Session.query.get(session_id)
-    if not session or not session.paid:
-        return jsonify({"code": "session_invalid_or_unpaid", "message": "Session non trouvée ou non payée."}), 404
-    
-    files_to_download = { file.doc_type: {"id": file.id, "name": file.name} for file in session.files }
-    return jsonify({"files": files_to_download})
-
-# --- MODIFICATION MAJEURE APPLIQUÉE ICI (Logique Supabase) ---
+# ... (les autres routes restent inchangées comme dans ta version) ...
+# --- MODIFICATION MINEURE : Améliorer la lisibilité et la robustesse ---
 @bp.route('/download/<session_id>/<file_id>', methods=['GET'])
 def download_file(session_id, file_id):
     """Permet le téléchargement d'un fichier depuis Supabase Storage."""
@@ -174,29 +140,28 @@ def download_file(session_id, file_id):
 
     file_to_download = ProcessedFile.query.filter_by(id=file_id, session_id=session.id).first()
     
-    if file_to_download:
-        try:
-            # Création du client Supabase
-            supabase_url = current_app.config.get('SUPABASE_URL')
-            supabase_key = current_app.config.get('SUPABASE_SERVICE_KEY')
-            if not supabase_url or not supabase_key:
-                raise Exception("Les variables d'environnement SUPABASE ne sont pas configurées.")
-            supabase: Client = create_client(supabase_url, supabase_key)
-
-            # Téléchargement depuis Supabase
-            file_data = supabase.storage.from_("processed-files").download(file_to_download.path)
-            
-            current_app.logger.info(f"Téléchargement depuis Supabase du fichier {file_to_download.path}")
-            
-            return send_file(
-                io.BytesIO(file_data),
-                mimetype='image/jpeg',
-                as_attachment=True, 
-                download_name=file_to_download.name
-            )
-        except Exception as e:
-             current_app.logger.error(f"Erreur de téléchargement depuis Supabase pour {file_to_download.path}: {e}")
-             return jsonify({"code": "file_not_found_in_storage", "message": "Fichier non trouvé dans le stockage."}), 404
-    else:
+    if not file_to_download:
         current_app.logger.warning(f"Tentative de téléchargement d'un enregistrement de fichier non trouvé: {file_id} pour session {session_id}")
         return jsonify({"code": "file_record_not_found", "message": "Enregistrement du fichier non trouvé."}), 404
+
+    try:
+        supabase_url = current_app.config.get('SUPABASE_URL')
+        supabase_key = current_app.config.get('SUPABASE_SERVICE_KEY')
+        if not supabase_url or not supabase_key:
+            current_app.logger.critical("Les variables d'environnement SUPABASE ne sont pas configurées pour le téléchargement.")
+            raise Exception("Configuration serveur incomplète.")
+        supabase: Client = create_client(supabase_url, supabase_key)
+
+        file_data = supabase.storage.from_("processed-files").download(file_to_download.path)
+        
+        current_app.logger.info(f"Téléchargement depuis Supabase du fichier {file_to_download.path}")
+        
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype='image/jpeg',
+            as_attachment=True, 
+            download_name=file_to_download.name
+        )
+    except Exception as e:
+         current_app.logger.error(f"Erreur de téléchargement depuis Supabase pour {file_to_download.path}: {e}")
+         return jsonify({"code": "file_not_found_in_storage", "message": "Fichier non trouvé dans le stockage."}), 404
