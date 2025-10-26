@@ -5,27 +5,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    """Configuration de base."""
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'une-cle-secrete-par-defaut')
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') # On peut enlever la valeur par défaut si .env est toujours présent
+    """Configuration de base pour la production."""
+    # Clé secrète pour sécuriser les sessions et cookies
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    
+    # Configuration de la base de données (Supabase/PostgreSQL)
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
     SQLALCHEMY_ENGINE_OPTIONS = {
-    "pool_pre_ping": True,
-}
+        "pool_pre_ping": True,
+    }
     
-    # --- CONFIGURATION CELERY CORRIGÉE ---
-    # On revient aux majuscules, comme Flask l'attend.
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    # --- SUPPRESSION : La configuration Celery n'est plus nécessaire ---
+    # CELERY_BROKER_URL = ...
+    # CELERY_RESULT_BACKEND = ...
+    # CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = ...
     
-    # On ajoute cette ligne pour résoudre le deuxième warning, en majuscules.
-    CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-    
-    # Dossiers
+    # Dossiers (utilisés localement ou pour des fichiers temporaires)
+    # Le code dans routes/main.py utilise maintenant /tmp/ pour les fichiers temporaires,
+    # ces variables sont donc moins critiques mais conservées par sécurité.
     UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'uploads'))
     PROCESSED_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'processed'))
 
     # Clés Stripe
     STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
     STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
+
+    # --- AJOUT : Configuration pour Supabase Storage ---
+    SUPABASE_URL = os.environ.get('SUPABASE_URL')
+    SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY')
