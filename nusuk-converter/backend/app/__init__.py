@@ -3,16 +3,15 @@ import os
 import logging
 from flask import Flask
 from .config import Config
-from .extensions import db, cors, celery as celery_app
+from .extensions import db, cors
 
 def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     
-    # ... (partie création de dossiers et logging inchangée) ...
     # S'assurer que les dossiers existent
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
+    os.makedirs(app.config.get('UPLOAD_FOLDER', 'uploads'), exist_ok=True)
+    os.makedirs(app.config.get('PROCESSED_FOLDER', 'processed'), exist_ok=True)
     os.makedirs(app.instance_path, exist_ok=True)
 
     # Configuration du logging
@@ -30,27 +29,24 @@ def create_app(config_class=Config):
 
     # Initialisation des extensions
     db.init_app(app)
-    cors.init_app(app, origins=["http://localhost:3000", "https://nusuk-converter-frontend.vercel.app"]) # Remplace par ton futur domaine Vercel
-
-    
-    celery_app.config_from_object(app.config, namespace='CELERY')
-
-    # Lier le contexte de l'application Flask aux tâches Celery
-    class ContextTask(celery_app.Task):
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return self.run(*args, **kwargs)
-
-    celery_app.Task = ContextTask
-
-    app.celery = celery_app
+    # AJOUT: Gestion plus flexible des origines pour CORS
+    allowed_origins = [
+        "http://localhost:3000", 
+        "https://nusuk-converter-frontend.vercel.app"
+    ]
+    # Possibilité d'ajouter une origine depuis les variables d'environnement
+    if os.environ.get('VERCEL_URL'):
+        allowed_origins.append(f"https://{os.environ.get('VERCEL_URL')}")
+        
+    cors.init_app(app, origins=allowed_origins, supports_credentials=True)
 
     # Enregistrement des blueprints
     from .routes.main import bp as main_bp
     app.register_blueprint(main_bp, url_prefix='/api')
     
-    from .routes.webhooks import bp as webhooks_bp
-    app.register_blueprint(webhooks_bp, url_prefix='/api/webhooks')
+    # MODIFICATION: Mettre en commentaire l'enregistrement du blueprint webhook
+    # from .routes.webhooks import bp as webhooks_bp
+    # app.register_blueprint(webhooks_bp, url_prefix='/api/webhooks')
 
     with app.app_context():
         db.create_all()
