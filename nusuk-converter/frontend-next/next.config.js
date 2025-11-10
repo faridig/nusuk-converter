@@ -2,23 +2,26 @@
 
 const { i18n } = require('./next-i18next.config.js');
 
+// On récupère l'URL de l'API depuis les variables d'environnement.
+// S'il n'est pas défini, on utilise l'URL locale par défaut.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5001';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   i18n,
 
-  // --- AJOUTEZ CETTE SECTION ---
-  // Elle indique à Next.js de rediriger toutes les requêtes commençant
-  // par /api-proxy vers votre backend Flask.
+  // --- MODIFICATION APPLIQUÉE CI-DESSOUS ---
   async rewrites() {
     return [
       {
         source: '/api-proxy/:path*',
-        destination: 'http://127.0.0.1:5001/api/:path*',
+        // La destination est maintenant dynamique
+        destination: `${API_URL}/api/:path*`,
       },
     ];
   },
-  // --- FIN DE L'AJOUT ---
+  // --- FIN DE LA MODIFICATION ---
 };
 
 module.exports = nextConfig;
