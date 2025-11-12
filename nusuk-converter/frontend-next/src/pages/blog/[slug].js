@@ -1,7 +1,7 @@
 // frontend-next/src/pages/blog/[slug].js
 import Head from 'next/head';
 import Link from 'next/link';
-import { getAllPostSlugs, getPostData } from '../../lib/posts';
+import { getAllPostSlugs, getPostData } from '@/lib/posts';
 import LanguageSwitcher from '@/components/LanguageSwitcher'; // Pour la cohérence
 
 // Cette fonction s'exécute au moment du build pour chercher les données

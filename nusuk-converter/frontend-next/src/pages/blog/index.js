@@ -1,7 +1,7 @@
 // frontend-next/src/pages/blog/index.js
 import Head from 'next/head';
 import Link from 'next/link';
-import { getSortedPostsData } from '../../lib/posts';
+import { getSortedPostsData } from '@/lib/posts';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export async function getStaticProps() {

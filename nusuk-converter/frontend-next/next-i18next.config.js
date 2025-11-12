@@ -9,8 +9,7 @@ module.exports = {
     // La liste de toutes les langues supportées reste la même.
     locales: ['en', 'fr', 'ar', 'de', 'es', 'it', 'pt'],
 
-    // La détection de la langue reste activée, ce qui est une bonne pratique.
-    localeDetection: true,
+    
   },
 
   reloadOnPrerender: process.env.NODE_ENV === 'development',
