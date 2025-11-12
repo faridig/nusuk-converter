@@ -1,8 +1,10 @@
+// frontend-next/src/pages/_document.js
 import { Html, Head, Main, NextScript } from "next/document";
 
-export default function Document() {
+export default function Document(props) { // <-- Recevez les props
   return (
-    <Html lang="en">
+    // Utilisez la locale actuelle pour l'attribut lang
+    <Html lang={props.locale || 'en'}> 
       <Head />
       <body className="antialiased">
         <Main />

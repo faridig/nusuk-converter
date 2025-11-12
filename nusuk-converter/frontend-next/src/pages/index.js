@@ -17,7 +17,6 @@ const MailIcon = () => (
   </svg>
 );
 
-// --- AJOUT : Icônes pour les étapes pour une meilleure UX ---
 const UploadIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-brand-green mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
 );
@@ -39,6 +38,25 @@ export default function HomePage() {
         <meta
           name="description"
           content={t('home.metaDescription')}
+        />
+        {/* Vous avez correctement ajouté les données structurées ici */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'SoftwareApplication',
+              name: 'Pilgrim Docs',
+              applicationCategory: 'Utilities',
+              operatingSystem: 'Web',
+              description: t('home.metaDescription'),
+              offers: {
+                '@type': 'Offer',
+                price: '1.20',
+                priceCurrency: 'EUR',
+              },
+            }),
+          }}
         />
       </Head>
       <div className="bg-brand-background min-h-screen flex flex-col items-center justify-between font-sans text-brand-text-primary">
@@ -65,7 +83,6 @@ export default function HomePage() {
                 </a>
               </Link>
 
-              {/* --- MODIFICATION : Ajout des icônes et effets de survol --- */}
               <div className="mt-20 text-left grid md:grid-cols-3 gap-8">
                 <div className="p-6 bg-brand-surface rounded-lg shadow-sm border border-brand-border transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
                   <UploadIcon />
@@ -92,7 +109,6 @@ export default function HomePage() {
             </main>
           </div>
 
-          {/* --- MODIFICATION : Amélioration de la section contact --- */}
           <section className="w-full bg-white border-t border-b border-gray-100 py-16 mt-24">
               <div className="text-center max-w-2xl mx-auto px-6">
                   <h2 className="text-3xl font-bold text-brand-text-primary">
@@ -103,7 +119,7 @@ export default function HomePage() {
                   </p>
                   <div className="mt-8">
                       <a 
-                          href="mailto:nusuk_documents@proton.me" 
+                          href="mailto:pilgrimdocs@proton.me" 
                           className="inline-flex items-center justify-center bg-white hover:bg-green-50 text-brand-green font-semibold px-6 py-3 rounded-lg shadow-sm transition-colors border border-brand-green"
                       >
                           <MailIcon />
@@ -114,12 +130,18 @@ export default function HomePage() {
           </section>
         </div>
 
-        <footer className="py-8 w-full flex justify-center">
+        {/* --- MODIFICATION : Ajout du lien vers le blog dans le footer --- */}
+        <footer className="py-8 w-full flex justify-center items-center space-x-8">
+          <Link href="/blog" legacyBehavior>
+              <a className="text-brand-text-secondary hover:text-brand-green hover:underline">Blog</a>
+          </Link>
           <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50/60 p-3 text-sm text-green-800 font-medium">
             <ShieldIcon />
             <span>{t('home.footer_privacy')}</span>
           </div>
         </footer>
+        {/* --- FIN DE LA MODIFICATION --- */}
+        
       </div>
     </>
   );
