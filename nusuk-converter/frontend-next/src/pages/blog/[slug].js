@@ -3,6 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { getAllPostSlugs, getPostData } from '@/lib/posts';
 import LanguageSwitcher from '@/components/LanguageSwitcher'; // Pour la cohérence
+import { i18n } from '../../../next-i18next.config.js'; // --- MODIFICATION : Ajout de cet import ---
 
 // Cette fonction s'exécute au moment du build pour chercher les données
 export async function getStaticProps({ params }) {
@@ -14,16 +15,33 @@ export async function getStaticProps({ params }) {
   };
 }
 
+// --- MODIFICATION : La fonction getStaticPaths est maintenant consciente des langues ---
 // Cette fonction s'exécute au moment du build pour connaître les URLs à générer
 export async function getStaticPaths() {
-  const paths = getAllPostSlugs();
+  const postSlugs = getAllPostSlugs(); // Récupère [{ params: { slug: '...' } }, ...]
+  const locales = i18n.locales; // Récupère ['en', 'fr', 'ar', ...]
+
+  const paths = [];
+  
+  // Pour chaque slug d'article...
+  postSlugs.forEach(slugObj => {
+    // ...on crée un chemin pour chaque langue
+    locales.forEach(locale => {
+      paths.push({
+        params: { slug: slugObj.params.slug },
+        locale: locale, // On spécifie la langue pour ce chemin
+      });
+    });
+  });
+
   return {
-    paths,
+    paths, // Retourne la liste complète des chemins (slug x langue)
     fallback: false, // Si l'URL n'existe pas, renvoie une 404
   };
 }
+// --- FIN DE LA MODIFICATION ---
 
-// C'est notre composant React pour la page de l'article
+// C'est notre composant React pour la page de l'article (INCHANGÉ)
 export default function Post({ postData }) {
   return (
     <>
