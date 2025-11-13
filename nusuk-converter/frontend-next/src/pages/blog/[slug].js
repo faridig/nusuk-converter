@@ -2,46 +2,44 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { getAllPostSlugs, getPostData } from '@/lib/posts';
-import LanguageSwitcher from '@/components/LanguageSwitcher'; // Pour la cohérence
-import { i18n } from '../../../next-i18next.config.js'; // --- MODIFICATION : Ajout de cet import ---
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { i18n } from '../../../next-i18next.config.js';
 
-// Cette fonction s'exécute au moment du build pour chercher les données
-export async function getStaticProps({ params }) {
-  const postData = await getPostData(params.slug);
+// --- MODIFICATION : getStaticProps reçoit maintenant "locale" et le passe à getPostData ---
+export async function getStaticProps({ params, locale }) {
+  // On passe maintenant le slug ET la langue pour récupérer le bon fichier .md
+  const postData = await getPostData(params.slug, locale);
   return {
     props: {
       postData,
     },
   };
 }
+// --- FIN DE LA MODIFICATION ---
 
-// --- MODIFICATION : La fonction getStaticPaths est maintenant consciente des langues ---
-// Cette fonction s'exécute au moment du build pour connaître les URLs à générer
+// La fonction getStaticPaths que vous avez mise à jour est parfaite, elle reste inchangée.
 export async function getStaticPaths() {
-  const postSlugs = getAllPostSlugs(); // Récupère [{ params: { slug: '...' } }, ...]
-  const locales = i18n.locales; // Récupère ['en', 'fr', 'ar', ...]
+  const postSlugs = getAllPostSlugs();
+  const locales = i18n.locales;
 
   const paths = [];
   
-  // Pour chaque slug d'article...
   postSlugs.forEach(slugObj => {
-    // ...on crée un chemin pour chaque langue
     locales.forEach(locale => {
       paths.push({
         params: { slug: slugObj.params.slug },
-        locale: locale, // On spécifie la langue pour ce chemin
+        locale: locale,
       });
     });
   });
 
   return {
-    paths, // Retourne la liste complète des chemins (slug x langue)
-    fallback: false, // Si l'URL n'existe pas, renvoie une 404
+    paths,
+    fallback: false,
   };
 }
-// --- FIN DE LA MODIFICATION ---
 
-// C'est notre composant React pour la page de l'article (INCHANGÉ)
+// Le composant Post reste inchangé, il affiche simplement les données qu'on lui donne.
 export default function Post({ postData }) {
   return (
     <>
@@ -60,7 +58,6 @@ export default function Post({ postData }) {
             {postData.title}
           </h1>
           
-          {/* Le contenu HTML de l'article est injecté ici */}
           <div 
             className="prose prose-lg prose-teal max-w-none"
             dangerouslySetInnerHTML={{ __html: postData.contentHtml }} 

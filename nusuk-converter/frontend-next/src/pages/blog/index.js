@@ -3,15 +3,21 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { getSortedPostsData } from '@/lib/posts';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+// --- AJOUT : Importation nécessaire pour i18next ---
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-export async function getStaticProps() {
-  const allPostsData = getSortedPostsData();
+// --- MODIFICATION : La fonction reçoit la "locale" et la passe à getSortedPostsData ---
+export async function getStaticProps({ locale }) {
+  const allPostsData = getSortedPostsData({ locale }); // On passe la locale pour filtrer
   return {
     props: {
       allPostsData,
+      // On inclut les traductions pour les composants comme LanguageSwitcher
+      ...(await serverSideTranslations(locale, ['common'])),
     },
   };
 }
+// --- FIN DE LA MODIFICATION ---
 
 export default function BlogHome({ allPostsData }) {
   return (
