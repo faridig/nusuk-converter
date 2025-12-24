@@ -1,38 +1,36 @@
 // frontend-next/src/pages/blog/[slug].js
 import Head from 'next/head';
 import Link from 'next/link';
-import { useRouter } from 'next/router'; // --- AJOUT : Nécessaire pour l'URL canonique
-import { getAllPostSlugs, getPostData } from '@/lib/posts';
+import { useRouter } from 'next/router';
+// --- MODIFICATION : On importe getAllPostPaths au lieu de getAllPostSlugs
+import { getAllPostPaths, getPostData } from '@/lib/posts';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-import { i18n } from '../../../next-i18next.config.js';
+// --- AJOUT : Nécessaire pour que le LanguageSwitcher fonctionne
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 
-// --- MODIFICATION : getStaticProps reçoit maintenant "locale" et le passe à getPostData ---
 export async function getStaticProps({ params, locale }) {
-  // On passe maintenant le slug ET la langue pour récupérer le bon fichier .md
-  const postData = await getPostData(params.slug, locale);
-  return {
-    props: {
-      postData,
-    },
-  };
+  try {
+    const postData = await getPostData(params.slug, locale);
+    return {
+      props: {
+        postData,
+        // On charge les traductions pour le composant LanguageSwitcher
+        ...(await serverSideTranslations(locale, ['common'])),
+      },
+    };
+  } catch (error) {
+    // Si le fichier n'existe pas (cas rare grâce à getStaticPaths), on renvoie 404
+    return {
+      notFound: true,
+    };
+  }
 }
-// --- FIN DE LA MODIFICATION ---
 
-// La fonction getStaticPaths reste inchangée.
+// --- MODIFICATION MAJEURE : Correction de l'erreur de build ---
 export async function getStaticPaths() {
-  const postSlugs = getAllPostSlugs();
-  const locales = i18n.locales;
-
-  const paths = [];
-  
-  postSlugs.forEach(slugObj => {
-    locales.forEach(locale => {
-      paths.push({
-        params: { slug: slugObj.params.slug },
-        locale: locale,
-      });
-    });
-  });
+  // On récupère directement les chemins valides (slug + locale) depuis le fichier lib
+  // Cela évite de générer des pages anglaises avec des slugs français qui n'existent pas
+  const paths = getAllPostPaths();
 
   return {
     paths,
@@ -41,7 +39,6 @@ export async function getStaticPaths() {
 }
 
 export default function Post({ postData }) {
-  // --- AJOUT SEO : Logique pour l'URL canonique et le Schema ---
   const router = useRouter();
   const siteUrl = 'https://pilgrimdocs.app';
   
@@ -49,7 +46,7 @@ export default function Post({ postData }) {
   const currentPath = router.asPath.split('?')[0];
   const canonicalUrl = `${siteUrl}${router.locale === 'en' ? '' : `/${router.locale}`}${currentPath}`;
   
-  // Image par défaut si l'article n'en a pas (à adapter selon tes assets)
+  // Image par défaut si l'article n'en a pas
   const ogImage = postData.image 
     ? `${siteUrl}${postData.image}` 
     : `${siteUrl}/images/og-default.jpg`;
@@ -61,7 +58,7 @@ export default function Post({ postData }) {
     headline: postData.title,
     description: postData.description,
     image: ogImage,
-    datePublished: postData.date, // Assure-toi d'avoir une date dans le frontmatter de tes .md
+    datePublished: postData.date,
     author: {
       '@type': 'Organization',
       name: 'Pilgrim Docs',
@@ -72,7 +69,6 @@ export default function Post({ postData }) {
       '@id': canonicalUrl
     }
   };
-  // --- FIN AJOUT SEO ---
 
   return (
     <>
@@ -80,7 +76,7 @@ export default function Post({ postData }) {
         <title>{postData.title} - Pilgrim Docs</title>
         <meta name="description" content={postData.description} />
         
-        {/* Balise Canonique (Crucial pour le SEO multilingue) */}
+        {/* Balise Canonique */}
         <link rel="canonical" href={canonicalUrl} />
 
         {/* Open Graph / Facebook / WhatsApp */}
@@ -114,7 +110,6 @@ export default function Post({ postData }) {
             {postData.title}
           </h1>
           
-          {/* Si tu as une date dans tes fichiers MD, c'est bien de l'afficher */}
           {postData.date && (
             <p className="text-gray-500 text-sm mb-6">
               {new Date(postData.date).toLocaleDateString(router.locale, {
