@@ -32,7 +32,11 @@ def create_app(config_class=Config):
     # AJOUT: Gestion plus flexible des origines pour CORS
     allowed_origins = [
         "http://localhost:3000", 
-        "https://nusuk-converter-frontend.vercel.app"
+        "https://nusuk-converter-frontend.vercel.app",
+        "https://pilgrimdocs.app",
+        "https://www.pilgrimdocs.app"
+        
+        
     ]
     # Possibilité d'ajouter une origine depuis les variables d'environnement
     if os.environ.get('VERCEL_URL'):

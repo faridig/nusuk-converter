@@ -1,9 +1,10 @@
 // frontend-next/src/pages/index.js
 import Link from 'next/link';
-import Head from 'next/head';
+// import Head from 'next/head'; // Supprimé car géré par SeoHead
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import SeoHead from '@/components/SeoHead'; // <-- Import du nouveau composant
 
 const ShieldIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -31,34 +32,40 @@ const DownloadIcon = () => (
 export default function HomePage() {
   const { t } = useTranslation('common');
 
+  // Données structurées enrichies pour Google (Rich Snippets)
+  const schemaData = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication', // Plus précis que SoftwareApplication
+    name: 'Pilgrim Docs - Nusuk Converter',
+    url: 'https://pilgrimdocs.app',
+    applicationCategory: 'UtilityApplication',
+    operatingSystem: 'All', // Fonctionne sur Web, donc tous les OS
+    description: t('home.metaDescription'),
+    offers: {
+      '@type': 'Offer',
+      price: '1.20',
+      priceCurrency: 'EUR',
+    },
+    featureList: [
+      "Nusuk photo resizing",
+      "Passport cropping for Hajj",
+      "Umrah document optimization",
+      "Automatic background adjustment"
+    ],
+    browserRequirements: "Requires JavaScript. Requires HTML5."
+  };
+
   return (
     <>
-      <Head>
-        <title>{t('home.metaTitle')}</title>
-        <meta
-          name="description"
-          content={t('home.metaDescription')}
-        />
-        {/* Vous avez correctement ajouté les données structurées ici */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              '@context': 'https://schema.org',
-              '@type': 'SoftwareApplication',
-              name: 'Pilgrim Docs',
-              applicationCategory: 'Utilities',
-              operatingSystem: 'Web',
-              description: t('home.metaDescription'),
-              offers: {
-                '@type': 'Offer',
-                price: '1.20',
-                priceCurrency: 'EUR',
-              },
-            }),
-          }}
-        />
-      </Head>
+      {/* Utilisation du composant SEO optimisé */}
+      <SeoHead 
+        title={t('home.metaTitle')}
+        description={t('home.metaDescription')}
+        schemaJson={schemaData}
+        // Pense à ajouter une image 'og-home.jpg' dans ton dossier public/images pour les partages Facebook/WhatsApp
+        image="/images/og-home.jpg" 
+      />
+
       <div className="bg-brand-background min-h-screen flex flex-col items-center justify-between font-sans text-brand-text-primary">
         
         <div className="absolute top-4 right-4 md:top-6 md:right-6 z-10">
@@ -68,6 +75,7 @@ export default function HomePage() {
         <div className="w-full">
           <div className="text-center p-6 md:p-10 max-w-4xl mx-auto mt-20 md:mt-12">
             <header className="mb-12">
+              {/* h1 est parfait pour le SEO, assure-toi que la traduction contient les mots clés principaux */}
               <h1 className="text-4xl md:text-5xl font-bold text-brand-green mb-4">
                 {t('home.title')}
               </h1>
@@ -130,7 +138,6 @@ export default function HomePage() {
           </section>
         </div>
 
-        {/* --- MODIFICATION : Ajout du lien vers le blog dans le footer --- */}
         <footer className="py-8 w-full flex justify-center items-center space-x-8">
           <Link href="/blog" legacyBehavior>
               <a className="text-brand-text-secondary hover:text-brand-green hover:underline">Blog</a>
@@ -140,7 +147,6 @@ export default function HomePage() {
             <span>{t('home.footer_privacy')}</span>
           </div>
         </footer>
-        {/* --- FIN DE LA MODIFICATION --- */}
         
       </div>
     </>
