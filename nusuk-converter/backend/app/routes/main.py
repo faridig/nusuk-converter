@@ -3,11 +3,11 @@ import os
 import uuid
 import stripe
 import io
+import shutil
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app, send_file, session as flask_session
 from werkzeug.utils import secure_filename
-from supabase import create_client, Client
-from storage3.exceptions import StorageApiError
+# Les imports Supabase ont été retirés
 from ..models import db, Session, ProcessedFile
 from scripts.optimiseur_image import optimiser_image
 
@@ -34,7 +34,7 @@ def create_session():
 
 @bp.route('/process-image', methods=['POST'])
 def process_image():
-    """Traite une image, l'optimise, l'upload sur Supabase et la stocke en BDD."""
+    """Traite une image, l'optimise, et la stocke LOCALEMENT sur le serveur."""
     session_id = request.form.get('session_id')
     
     secure_session_id = flask_session.get('user_session_id')
@@ -54,16 +54,14 @@ def process_image():
         return jsonify({"code": "missing_parameters", "message": "Fichier ou doc_type manquant."}), 400
     
     try:
-        supabase_url = current_app.config.get('SUPABASE_URL')
-        supabase_key = current_app.config.get('SUPABASE_SERVICE_KEY')
-        if not supabase_url or not supabase_key:
-            current_app.logger.critical("Les variables d'environnement SUPABASE_URL ou SUPABASE_SERVICE_KEY ne sont pas configurées sur le serveur.")
-            raise Exception("Configuration serveur incomplète.")
-        supabase: Client = create_client(supabase_url, supabase_key)
-        
+        # Lecture du fichier entrant
         input_bytes = file.read()
-        params = {'max_largeur': 200, 'max_hauteur': 200, 'max_taille_mo': 1} if doc_type == 'photo' else {'max_largeur': 400, 'max_hauteur': 800, 'max_taille_mo': 1}
-        
+        if doc_type in ['photo', 'residence']:
+            params = {'max_largeur': 200, 'max_hauteur': 200, 'max_taille_mo': 1}
+        else:
+            # Sinon (c'est un passeport) -> 400x800
+            params = {'max_largeur': 400, 'max_hauteur': 800, 'max_taille_mo': 1}        
+        # Optimisation via fichier temporaire dans /tmp
         temp_output_path = f"/tmp/{uuid.uuid4()}.jpg"
         processed_path = optimiser_image(io.BytesIO(input_bytes), temp_output_path, **params)
         if not processed_path:
@@ -71,41 +69,52 @@ def process_image():
 
         with open(processed_path, 'rb') as f:
             processed_data = f.read()
-        os.remove(temp_output_path)
+        os.remove(temp_output_path) # Nettoyage du fichier temporaire
 
+        # --- LOGIQUE DE STOCKAGE LOCAL ---
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
         new_file_name = f"{doc_type}_{timestamp}_optimise.jpg"
         
-        supabase_path = f"{session.id}/{new_file_name}"
+        # Création du chemin relatif pour la BDD (ex: "uuid-session/photo_timestamp.jpg")
+        # On garde la même structure que Supabase pour faciliter une migration future si besoin
+        relative_path = f"{session.id}/{new_file_name}"
         
-        try:
-            supabase.storage.from_("processed-files").upload(
-                path=supabase_path,
-                file=processed_data,
-                file_options={"content-type": "image/jpeg", "upsert": False}
-            )
-        except StorageApiError as e:
-            if hasattr(e, 'error') and e.error == 'Duplicate':
-                current_app.logger.info(f"Le fichier {supabase_path} existe déjà. Tentative de mise à jour.")
-                supabase.storage.from_("processed-files").update(
-                    path=supabase_path,
-                    file=processed_data,
-                    file_options={"content-type": "image/jpeg"}
-                )
-            else:
-                current_app.logger.error(f"Erreur de stockage Supabase non gérée: {e}")
-                raise e
+        # Définition du dossier physique sur le disque
+        processed_root = current_app.config.get('PROCESSED_FOLDER')
+        if not processed_root:
+            raise Exception("La configuration PROCESSED_FOLDER est manquante.")
+            
+        local_session_dir = os.path.join(processed_root, session.id)
+        os.makedirs(local_session_dir, exist_ok=True) # Crée le dossier s'il n'existe pas
+        
+        full_local_path = os.path.join(local_session_dir, new_file_name)
+        
+        # Écriture du fichier sur le disque (écrase si existe, ce qui simplifie la logique d'update)
+        with open(full_local_path, 'wb') as f:
+            f.write(processed_data)
+            
+        current_app.logger.info(f"Fichier sauvegardé localement : {full_local_path}")
 
+        # --- MISE À JOUR BDD ---
         existing_file = ProcessedFile.query.filter_by(session_id=session.id, doc_type=doc_type).first()
+        
         if existing_file:
-            existing_file.path = supabase_path
+            # Optionnel : Supprimer l'ancien fichier physique pour ne pas encombrer le disque
+            old_full_path = os.path.join(processed_root, existing_file.path)
+            if os.path.exists(old_full_path) and existing_file.path != relative_path:
+                try:
+                    os.remove(old_full_path)
+                except OSError:
+                    pass # On ignore si l'ancien fichier n'existe pas
+            
+            existing_file.path = relative_path
             existing_file.name = new_file_name
             current_app.logger.info(f"Enregistrement du fichier mis à jour en BDD pour la session {session_id}")
         else:
             new_file = ProcessedFile(
                 id=str(uuid.uuid4()),
                 doc_type=doc_type,
-                path=supabase_path,
+                path=relative_path,
                 name=new_file_name,
                 session_id=session.id
             )
@@ -114,7 +123,6 @@ def process_image():
         
         db.session.commit()
         
-        current_app.logger.info(f"Upload/Update réussi sur Supabase ({supabase_path}) pour session {session_id}")
         return jsonify({"message": "Le fichier a été traité avec succès."}), 201
 
     except Exception as e:
@@ -145,8 +153,7 @@ def get_session_status(session_id):
 
 @bp.route('/download/<session_id>/<file_id>', methods=['GET'])
 def download_file(session_id, file_id):
-    """Permet le téléchargement d'un fichier depuis Supabase Storage."""
-    # MODIFICATION: Ajout de la vérification de session via cookie
+    """Permet le téléchargement d'un fichier depuis le stockage LOCAL."""
     secure_session_id = flask_session.get('user_session_id')
     if not secure_session_id or secure_session_id != session_id:
         current_app.logger.warning(f"Tentative de téléchargement non autorisé pour la session {session_id} (cookie: {secure_session_id})")
@@ -163,29 +170,31 @@ def download_file(session_id, file_id):
         return jsonify({"code": "file_record_not_found", "message": "Enregistrement du fichier non trouvé."}), 404
 
     try:
-        supabase_url = current_app.config.get('SUPABASE_URL')
-        supabase_key = current_app.config.get('SUPABASE_SERVICE_KEY')
-        if not supabase_url or not supabase_key:
-            current_app.logger.critical("Les variables d'environnement SUPABASE ne sont pas configurées pour le téléchargement.")
-            raise Exception("Configuration serveur incomplète.")
-        supabase: Client = create_client(supabase_url, supabase_key)
+        processed_root = current_app.config.get('PROCESSED_FOLDER')
+        if not processed_root:
+            raise Exception("Configuration PROCESSED_FOLDER manquante.")
 
-        file_data = supabase.storage.from_("processed-files").download(file_to_download.path)
+        # Reconstruction du chemin complet
+        full_path = os.path.join(processed_root, file_to_download.path)
         
-        current_app.logger.info(f"Téléchargement depuis Supabase du fichier {file_to_download.path}")
+        if not os.path.exists(full_path):
+            current_app.logger.error(f"Fichier physique introuvable sur le disque : {full_path}")
+            return jsonify({"code": "file_not_found_on_disk", "message": "Fichier introuvable sur le serveur."}), 404
+        
+        current_app.logger.info(f"Téléchargement local du fichier {full_path}")
         
         return send_file(
-            io.BytesIO(file_data),
+            full_path,
             mimetype='image/jpeg',
             as_attachment=True, 
             download_name=file_to_download.name
         )
     except Exception as e:
-         current_app.logger.error(f"Erreur de téléchargement depuis Supabase pour {file_to_download.path}: {e}")
-         return jsonify({"code": "file_not_found_in_storage", "message": "Fichier non trouvé dans le stockage."}), 404
+         current_app.logger.error(f"Erreur de téléchargement local pour {file_to_download.path}: {e}")
+         return jsonify({"code": "download_failed", "message": "Erreur serveur lors du téléchargement."}), 500
 
 
-# --- ROUTES MANQUANTES AJOUTÉES ICI ---
+# --- ROUTES DE PAIEMENT (INCHANGÉES) ---
 
 @bp.route('/create-payment-intent', methods=['POST'])
 def create_payment_intent():
@@ -240,7 +249,6 @@ def get_payment_status(session_id):
 @bp.route('/session-files/<session_id>', methods=['GET'])
 def get_session_files(session_id):
     """Récupère la liste des fichiers traités pour une session payée."""
-    # MODIFICATION: Ajout de la vérification de session via cookie
     secure_session_id = flask_session.get('user_session_id')
     if not secure_session_id or secure_session_id != session_id:
         current_app.logger.warning(f"Tentative d'accès non autorisé aux fichiers de la session {session_id} (cookie: {secure_session_id})")
@@ -310,7 +318,7 @@ def verify_payment():
         current_app.logger.error(f"Erreur lors de la vérification du PaymentIntent {payment_intent_id}: {e}")
         return jsonify({"code": "verification_failed", "message": str(e)}), 500
 
-# --- AJOUT DE LA ROUTE WEBHOOK ---
+# --- WEBHOOK STRIPE (INCHANGÉ) ---
 @bp.route('/webhooks/stripe', methods=['POST'])
 def stripe_webhook():
     current_app.logger.info("--> [WEBHOOK DANS MAIN.PY] Appel reçu sur /api/webhooks/stripe")

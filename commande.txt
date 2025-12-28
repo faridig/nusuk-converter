@@ -3,6 +3,13 @@ sudo kill 1234
 
 gpt-context-builder
 
+dans backend
+flask --app run.py run --debug --port=5001
+
+dans projet_nusuk
+cloudflared tunnel --url http://localhost:5001
+
+
 
 
 1 terminal

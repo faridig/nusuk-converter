@@ -13,16 +13,21 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_SECURE = False
     # --- FIN DE LA MODIFICATION ---
+    # 
+    BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///' + os.path.join(BASE_DIR, 'app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
     }
     
-    # Dossiers pour fichiers temporaires (moins critiques car /tmp est utilisé)
-    UPLOAD_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'uploads'))
-    PROCESSED_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'processed'))
+    # --- MODIFICATION : Définition claire du dossier de stockage local ---
+    
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+    # C'est ici que tes images finales seront stockées sur ton PC
+    PROCESSED_FOLDER = os.path.join(BASE_DIR, 'processed') 
 
     # Clés Stripe
     STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
