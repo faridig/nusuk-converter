@@ -3,7 +3,8 @@
 import '@/styles/globals.css';
 import 'react-image-crop/dist/ReactCrop.css';
 import { appWithTranslation } from 'next-i18next';
-import { Analytics } from "@vercel/analytics/react";
+import { Analytics } from "@vercel/analytics/next";
+
 // --- MODIFICATION : Importer Cairo, et useRouter ---
 import { Inter, Cairo } from 'next/font/google';
 import { useRouter } from 'next/router';
