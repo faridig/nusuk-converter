@@ -9,6 +9,8 @@ flask --app run.py run --debug --port=5001
 dans projet_nusuk
 cloudflared tunnel --url http://localhost:5001
 
+une fois qu'on a l'url du tunnel on mets à jour les variables d'env sur l'interface vercel puis on déploie et on met à jour le webhook dans stripe en y insérant l'url jusqua .com et en laissant la fin qui existe déjà api/stripe etc
+
 
 
 
